@@ -1,9 +1,7 @@
-// Dashboard Page - src/pages/Dashboard.tsx
-// Main page after login showing user stats and quick actions
-
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { 
   BookOpen, 
   TrendingUp, 
@@ -13,24 +11,70 @@ import {
   PlayCircle,
   BarChart3
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { User } from "@supabase/supabase-js";
+import { getLatestTestResult } from "@/lib/testResults";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  
-  // Get user data from localStorage (saved during login)
-  const userData = localStorage.getItem("user");
-  const user = userData ? JSON.parse(userData) : { name: "User", email: "" };
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [hasResults, setHasResults] = useState(false);
+  const [testCount, setTestCount] = useState(0);
 
-  // Function to handle logout
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/");
+        return;
+      }
+      setUser(session.user);
+
+      // Check for test results in database
+      try {
+        const result = await getLatestTestResult(session.user.id);
+        setHasResults(!!result);
+        
+        // Count total tests
+        const { count } = await supabase
+          .from("test_results")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", session.user.id)
+          .eq("category", "Overall");
+        setTestCount(count || 0);
+      } catch (error) {
+        console.error("Error fetching results:", error);
+      }
+      
+      setLoading(false);
+    };
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        navigate("/");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     navigate("/");
   };
 
-  // Get previous results from localStorage
-  const resultsData = localStorage.getItem("testResults");
-  const hasResults = resultsData !== null;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
 
   return (
     <div className="min-h-screen bg-background">
@@ -55,7 +99,7 @@ const Dashboard = () => {
         {/* Welcome Section */}
         <div className="mb-8 animate-fade-in">
           <h1 className="text-3xl font-bold text-foreground">
-            Welcome back, {user.name?.split(" ")[0] || "User"}!
+            Welcome back, {userName.split(" ")[0]}!
           </h1>
           <p className="text-muted-foreground mt-1">
             Ready to assess your skills and identify areas for improvement?
@@ -120,9 +164,7 @@ const Dashboard = () => {
                   <TrendingUp className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">
-                    {hasResults ? "1" : "0"}
-                  </p>
+                  <p className="text-2xl font-bold text-foreground">{testCount}</p>
                   <p className="text-sm text-muted-foreground">Tests Taken</p>
                 </div>
               </div>

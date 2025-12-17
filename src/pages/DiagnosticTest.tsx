@@ -1,13 +1,12 @@
-// Diagnostic Test Page - src/pages/DiagnosticTest.tsx
-// MCQ test with progress tracking
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { BookOpen, ChevronLeft, ChevronRight, CheckCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { saveTestResults } from "@/lib/testResults";
 
 // Sample questions data - in real app, fetch from backend
 const questions = [
@@ -161,19 +160,30 @@ const questions = [
 const DiagnosticTest = () => {
   const navigate = useNavigate();
   
-  // State variables
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<(number | null)[]>(
     Array(questions.length).fill(null)
   );
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // Calculate progress percentage
+  // Check auth on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/");
+        return;
+      }
+      setUserId(session.user.id);
+    };
+    checkAuth();
+  }, [navigate]);
+
   const progress = ((currentQuestion + 1) / questions.length) * 100;
   const question = questions[currentQuestion];
 
-  // Handle option selection
   const handleSelectOption = (optionIndex: number) => {
     setSelectedOption(optionIndex);
     const newAnswers = [...answers];
@@ -181,7 +191,6 @@ const DiagnosticTest = () => {
     setAnswers(newAnswers);
   };
 
-  // Go to next question
   const handleNext = () => {
     if (currentQuestion < questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
@@ -189,7 +198,6 @@ const DiagnosticTest = () => {
     }
   };
 
-  // Go to previous question
   const handlePrevious = () => {
     if (currentQuestion > 0) {
       setCurrentQuestion(currentQuestion - 1);
@@ -197,9 +205,7 @@ const DiagnosticTest = () => {
     }
   };
 
-  // Submit test and calculate results
   const handleSubmit = async () => {
-    // Check if all questions are answered
     const unanswered = answers.filter(a => a === null).length;
     if (unanswered > 0) {
       toast({
@@ -225,12 +231,10 @@ const DiagnosticTest = () => {
       }
     });
 
-    // Calculate total score
     const totalCorrect = answers.filter(
       (answer, index) => answer === questions[index].correctAnswer
     ).length;
 
-    // Prepare results object
     const results = {
       totalScore: Math.round((totalCorrect / questions.length) * 100),
       totalCorrect,
@@ -239,31 +243,31 @@ const DiagnosticTest = () => {
       date: new Date().toISOString()
     };
 
-    try {
-      // Try to send results to backend
-      const token = localStorage.getItem("token");
-      await fetch("http://localhost:5000/api/results", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(results)
-      });
-    } catch (error) {
-      // Backend not available - continue with local storage
-      console.log("Saving results locally");
-    }
-
-    // Save results to localStorage
+    // Save to localStorage for Results page
     localStorage.setItem("testResults", JSON.stringify(results));
 
-    toast({
-      title: "Test Completed!",
-      description: "Calculating your results...",
-    });
+    // Save to database if user is logged in
+    if (userId) {
+      try {
+        await saveTestResults(results, userId);
+        toast({
+          title: "Test Completed!",
+          description: "Your results have been saved.",
+        });
+      } catch (error) {
+        console.error("Error saving results:", error);
+        toast({
+          title: "Test Completed!",
+          description: "Calculating your results...",
+        });
+      }
+    } else {
+      toast({
+        title: "Test Completed!",
+        description: "Calculating your results...",
+      });
+    }
 
-    // Navigate to results page
     setTimeout(() => {
       setIsSubmitting(false);
       navigate("/results");
@@ -291,7 +295,6 @@ const DiagnosticTest = () => {
               Exit
             </Button>
           </div>
-          {/* Progress Bar */}
           <div className="mt-4">
             <Progress value={progress} className="h-2" />
           </div>
@@ -302,17 +305,14 @@ const DiagnosticTest = () => {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <Card className="shadow-soft border-0 animate-fade-in">
           <CardContent className="p-6 md:p-8">
-            {/* Category Badge */}
             <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground mb-4">
               {question.category}
             </span>
 
-            {/* Question */}
             <h2 className="text-xl md:text-2xl font-semibold text-foreground mb-6">
               {question.question}
             </h2>
 
-            {/* Options */}
             <div className="space-y-3">
               {question.options.map((option, index) => (
                 <button
@@ -344,7 +344,6 @@ const DiagnosticTest = () => {
               ))}
             </div>
 
-            {/* Navigation Buttons */}
             <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
               <Button
                 variant="outline"
@@ -359,7 +358,6 @@ const DiagnosticTest = () => {
                 <Button 
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  variant="success"
                 >
                   {isSubmitting ? "Submitting..." : "Submit Test"}
                 </Button>
@@ -373,7 +371,6 @@ const DiagnosticTest = () => {
           </CardContent>
         </Card>
 
-        {/* Question Navigation Dots */}
         <div className="flex flex-wrap justify-center gap-2 mt-6">
           {questions.map((_, index) => (
             <button
@@ -386,7 +383,7 @@ const DiagnosticTest = () => {
                 index === currentQuestion
                   ? "gradient-primary text-primary-foreground"
                   : answers[index] !== null
-                  ? "bg-success text-success-foreground"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-secondary-foreground hover:bg-accent"
               }`}
             >
