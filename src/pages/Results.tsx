@@ -1,6 +1,3 @@
-// Results Page - src/pages/Results.tsx
-// Shows test results with strong/weak areas visualization
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,14 +12,13 @@ import {
   ArrowLeft,
   RefreshCw
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-// Type for category results
 interface CategoryResult {
   correct: number;
   total: number;
 }
 
-// Type for all results
 interface TestResults {
   totalScore: number;
   totalCorrect: number;
@@ -35,18 +31,26 @@ const Results = () => {
   const navigate = useNavigate();
   const [results, setResults] = useState<TestResults | null>(null);
 
-  // Load results when page loads
   useEffect(() => {
-    const savedResults = localStorage.getItem("testResults");
-    if (savedResults) {
-      setResults(JSON.parse(savedResults));
-    } else {
-      // No results found, redirect to dashboard
-      navigate("/dashboard");
-    }
+    const checkAuthAndLoadResults = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/");
+        return;
+      }
+
+      // Load results from localStorage (saved after test completion)
+      const savedResults = localStorage.getItem("testResults");
+      if (savedResults) {
+        setResults(JSON.parse(savedResults));
+      } else {
+        navigate("/dashboard");
+      }
+    };
+    
+    checkAuthAndLoadResults();
   }, [navigate]);
 
-  // Show loading while data loads
   if (!results) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -55,7 +59,6 @@ const Results = () => {
     );
   }
 
-  // Calculate which areas are strong and weak
   const categoryData = Object.entries(results.categoryResults).map(([name, data]) => {
     const percentage = Math.round((data.correct / data.total) * 100);
     return {
@@ -68,17 +71,15 @@ const Results = () => {
     };
   });
 
-  // Sort by percentage (weak areas first)
   const sortedCategories = [...categoryData].sort((a, b) => a.percentage - b.percentage);
   const strongAreas = categoryData.filter(c => c.isStrong);
   const weakAreas = categoryData.filter(c => c.isWeak);
   const averageAreas = categoryData.filter(c => !c.isStrong && !c.isWeak);
 
-  // Get score color based on performance
   const getScoreColor = () => {
-    if (results.totalScore >= 70) return "text-success";
-    if (results.totalScore >= 50) return "text-warning";
-    return "text-destructive";
+    if (results.totalScore >= 70) return "text-green-600";
+    if (results.totalScore >= 50) return "text-yellow-600";
+    return "text-red-600";
   };
 
   return (
@@ -121,13 +122,12 @@ const Results = () => {
               You answered {results.totalCorrect} out of {results.totalQuestions} questions correctly
             </p>
             
-            {/* Performance Message */}
             <div className={`mt-4 p-4 rounded-xl ${
               results.totalScore >= 70 
-                ? "bg-success/10 text-success" 
+                ? "bg-green-500/10 text-green-600" 
                 : results.totalScore >= 50 
-                ? "bg-warning/10 text-warning"
-                : "bg-destructive/10 text-destructive"
+                ? "bg-yellow-500/10 text-yellow-600"
+                : "bg-red-500/10 text-red-600"
             }`}>
               {results.totalScore >= 70 && "Great job! You have a solid foundation."}
               {results.totalScore >= 50 && results.totalScore < 70 && "Good effort! There's room for improvement."}
@@ -142,7 +142,7 @@ const Results = () => {
           <Card className="shadow-soft border-0">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <AlertTriangle className="w-5 h-5 text-warning" />
+                <AlertTriangle className="w-5 h-5 text-yellow-500" />
                 Areas to Improve
               </CardTitle>
             </CardHeader>
@@ -153,9 +153,9 @@ const Results = () => {
                     <div key={area.name}>
                       <div className="flex justify-between mb-1">
                         <span className="text-sm font-medium text-foreground">{area.name}</span>
-                        <span className="text-sm text-destructive font-medium">{area.percentage}%</span>
+                        <span className="text-sm text-red-600 font-medium">{area.percentage}%</span>
                       </div>
-                      <Progress value={area.percentage} className="h-2 bg-destructive/20" />
+                      <Progress value={area.percentage} className="h-2" />
                       <p className="text-xs text-muted-foreground mt-1">
                         {area.correct}/{area.total} correct
                       </p>
@@ -174,7 +174,7 @@ const Results = () => {
           <Card className="shadow-soft border-0">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <CheckCircle className="w-5 h-5 text-success" />
+                <CheckCircle className="w-5 h-5 text-green-500" />
                 Strong Areas
               </CardTitle>
             </CardHeader>
@@ -185,7 +185,7 @@ const Results = () => {
                     <div key={area.name}>
                       <div className="flex justify-between mb-1">
                         <span className="text-sm font-medium text-foreground">{area.name}</span>
-                        <span className="text-sm text-success font-medium">{area.percentage}%</span>
+                        <span className="text-sm text-green-600 font-medium">{area.percentage}%</span>
                       </div>
                       <Progress value={area.percentage} className="h-2" />
                       <p className="text-xs text-muted-foreground mt-1">
@@ -219,24 +219,19 @@ const Results = () => {
                     <div className="flex justify-between mb-1">
                       <span className="font-medium text-foreground">{area.name}</span>
                       <span className={`font-medium ${
-                        area.isStrong ? "text-success" : area.isWeak ? "text-destructive" : "text-warning"
+                        area.isStrong ? "text-green-600" : area.isWeak ? "text-red-600" : "text-yellow-600"
                       }`}>
                         {area.percentage}%
                       </span>
                     </div>
-                    <Progress 
-                      value={area.percentage} 
-                      className={`h-3 ${
-                        area.isStrong ? "bg-success/20" : area.isWeak ? "bg-destructive/20" : "bg-warning/20"
-                      }`} 
-                    />
+                    <Progress value={area.percentage} className="h-3" />
                   </div>
                   <div className={`px-2 py-1 rounded text-xs font-medium ${
                     area.isStrong 
-                      ? "bg-success/10 text-success" 
+                      ? "bg-green-500/10 text-green-600" 
                       : area.isWeak 
-                      ? "bg-destructive/10 text-destructive"
-                      : "bg-warning/10 text-warning"
+                      ? "bg-red-500/10 text-red-600"
+                      : "bg-yellow-500/10 text-yellow-600"
                   }`}>
                     {area.correct}/{area.total}
                   </div>
@@ -255,7 +250,7 @@ const Results = () => {
             <ul className="space-y-3 text-sm">
               {weakAreas.map((area) => (
                 <li key={area.name} className="flex items-start gap-2">
-                  <div className="w-2 h-2 rounded-full bg-warning mt-2" />
+                  <div className="w-2 h-2 rounded-full bg-yellow-500 mt-2" />
                   <span className="text-foreground">
                     Focus on <strong>{area.name}</strong> - Review fundamental concepts and practice more exercises in this area.
                   </span>
@@ -271,7 +266,7 @@ const Results = () => {
               ))}
               {strongAreas.length > 0 && (
                 <li className="flex items-start gap-2">
-                  <div className="w-2 h-2 rounded-full bg-success mt-2" />
+                  <div className="w-2 h-2 rounded-full bg-green-500 mt-2" />
                   <span className="text-foreground">
                     Keep up the great work in your strong areas and consider helping others learn these topics!
                   </span>

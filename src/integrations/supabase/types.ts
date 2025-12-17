@@ -14,7 +14,140 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          login_type: string | null
+          name: string | null
+          role: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          login_type?: string | null
+          name?: string | null
+          role?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          login_type?: string | null
+          name?: string | null
+          role?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      questions: {
+        Row: {
+          category: string
+          correct_answer: string
+          created_at: string
+          difficulty: string | null
+          id: string
+          options: Json
+          question: string
+          topic: string
+        }
+        Insert: {
+          category: string
+          correct_answer: string
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          options: Json
+          question: string
+          topic: string
+        }
+        Update: {
+          category?: string
+          correct_answer?: string
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          options?: Json
+          question?: string
+          topic?: string
+        }
+        Relationships: []
+      }
+      test_results: {
+        Row: {
+          accuracy: number
+          category: string
+          created_at: string
+          id: string
+          score: number
+          strong_topics: Json | null
+          total_questions: number
+          user_id: string
+          weak_topics: Json | null
+        }
+        Insert: {
+          accuracy: number
+          category: string
+          created_at?: string
+          id?: string
+          score: number
+          strong_topics?: Json | null
+          total_questions: number
+          user_id: string
+          weak_topics?: Json | null
+        }
+        Update: {
+          accuracy?: number
+          category?: string
+          created_at?: string
+          id?: string
+          score?: number
+          strong_topics?: Json | null
+          total_questions?: number
+          user_id?: string
+          weak_topics?: Json | null
+        }
+        Relationships: []
+      }
+      user_answers: {
+        Row: {
+          answered_at: string
+          id: string
+          is_correct: boolean
+          question_id: string
+          selected_option: string
+          user_id: string
+        }
+        Insert: {
+          answered_at?: string
+          id?: string
+          is_correct: boolean
+          question_id: string
+          selected_option: string
+          user_id: string
+        }
+        Update: {
+          answered_at?: string
+          id?: string
+          is_correct?: boolean
+          question_id?: string
+          selected_option?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_answers_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
