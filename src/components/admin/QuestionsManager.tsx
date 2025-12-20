@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Search, Filter, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Filter, X, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useQuestions, Question } from "@/hooks/useQuestions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -33,6 +38,8 @@ export const QuestionsManager = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
 
   // Form state
   const [formData, setFormData] = useState({
@@ -111,10 +118,76 @@ export const QuestionsManager = () => {
     return matchesSearch && matchesCategory;
   });
 
+  // Group questions by category and then by topic
+  const groupedQuestions = filteredQuestions.reduce((acc, question) => {
+    const category = question.category;
+    const topic = question.topic;
+    
+    if (!acc[category]) {
+      acc[category] = {};
+    }
+    if (!acc[category][topic]) {
+      acc[category][topic] = [];
+    }
+    acc[category][topic].push(question);
+    return acc;
+  }, {} as Record<string, Record<string, Question[]>>);
+
+  const toggleCategory = (category: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(category)) {
+      newExpanded.delete(category);
+    } else {
+      newExpanded.add(category);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  const toggleTopic = (topicKey: string) => {
+    const newExpanded = new Set(expandedTopics);
+    if (newExpanded.has(topicKey)) {
+      newExpanded.delete(topicKey);
+    } else {
+      newExpanded.add(topicKey);
+    }
+    setExpandedTopics(newExpanded);
+  };
+
+  const expandAll = () => {
+    const allCategories = new Set(Object.keys(groupedQuestions));
+    const allTopics = new Set<string>();
+    Object.keys(groupedQuestions).forEach(cat => {
+      Object.keys(groupedQuestions[cat]).forEach(topic => {
+        allTopics.add(`${cat}-${topic}`);
+      });
+    });
+    setExpandedCategories(allCategories);
+    setExpandedTopics(allTopics);
+  };
+
+  const collapseAll = () => {
+    setExpandedCategories(new Set());
+    setExpandedTopics(new Set());
+  };
+
   const difficultyColors = {
     easy: "bg-success/10 text-success border-success/20",
     medium: "bg-warning/10 text-warning border-warning/20",
     hard: "bg-destructive/10 text-destructive border-destructive/20",
+  };
+
+  const categoryColors: Record<string, string> = {
+    Quantitative: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    Logical: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+    Verbal: "bg-green-500/10 text-green-600 border-green-500/20",
+    Technical: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  };
+
+  const categoryIcons: Record<string, string> = {
+    Quantitative: "📊",
+    Logical: "🧠",
+    Verbal: "📝",
+    Technical: "💻",
   };
 
   return (
@@ -123,7 +196,7 @@ export const QuestionsManager = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold">Questions Bank</h1>
-          <p className="text-muted-foreground">Manage your diagnostic test questions</p>
+          <p className="text-muted-foreground">Manage your diagnostic test questions ({filteredQuestions.length} total)</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open);
@@ -182,7 +255,7 @@ export const QuestionsManager = () => {
                 <Input
                   value={formData.topic}
                   onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                  placeholder="e.g., Percentages, Arrays, Grammar"
+                  placeholder="e.g., Logical Thinking, Java Strings, Reasoning"
                 />
               </div>
 
@@ -273,11 +346,20 @@ export const QuestionsManager = () => {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={expandAll}>
+            Expand All
+          </Button>
+          <Button variant="outline" size="sm" onClick={collapseAll}>
+            Collapse All
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
         <span>{filteredQuestions.length} questions</span>
+        <span>{Object.keys(groupedQuestions).length} categories</span>
         {categoryFilter !== "all" && (
           <Badge variant="secondary" className="gap-1">
             {categoryFilter}
@@ -286,7 +368,7 @@ export const QuestionsManager = () => {
         )}
       </div>
 
-      {/* Questions List */}
+      {/* Collapsible Questions List */}
       {isLoading ? (
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
@@ -297,66 +379,132 @@ export const QuestionsManager = () => {
           ))}
         </div>
       ) : (
-        <div className="grid gap-4">
-          {filteredQuestions.map((question, index) => (
-            <div
-              key={question.id}
-              className="bg-card rounded-xl border p-6 hover:shadow-medium transition-all duration-300 animate-fade-in-up"
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline">{question.category}</Badge>
-                    <Badge variant="secondary">{question.topic}</Badge>
-                    <Badge
-                      variant="outline"
-                      className={cn("capitalize", difficultyColors[question.difficulty as keyof typeof difficultyColors])}
-                    >
-                      {question.difficulty}
-                    </Badge>
-                  </div>
-                  <p className="font-medium">{question.question}</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {question.options.map((option, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "px-3 py-2 rounded-lg text-sm border",
-                          option === question.correct_answer
-                            ? "bg-success/10 border-success/30 text-success"
-                            : "bg-muted/50"
-                        )}
-                      >
-                        <span className="font-medium mr-2">{String.fromCharCode(65 + i)}.</span>
-                        {option}
+        <div className="space-y-4">
+          {Object.entries(groupedQuestions).map(([category, topics]) => {
+            const categoryQuestionCount = Object.values(topics).flat().length;
+            const topicCount = Object.keys(topics).length;
+            
+            return (
+              <Collapsible
+                key={category}
+                open={expandedCategories.has(category)}
+                onOpenChange={() => toggleCategory(category)}
+              >
+                <CollapsibleTrigger asChild>
+                  <div className="flex items-center justify-between p-4 bg-card rounded-xl border cursor-pointer hover:shadow-medium transition-all duration-300">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{categoryIcons[category] || "📚"}</span>
+                      <div>
+                        <h2 className="text-lg font-display font-bold flex items-center gap-2">
+                          {category}
+                          <Badge variant="outline" className={cn("ml-2", categoryColors[category])}>
+                            {categoryQuestionCount} questions
+                          </Badge>
+                        </h2>
+                        <p className="text-sm text-muted-foreground">{topicCount} topics</p>
                       </div>
-                    ))}
+                    </div>
+                    {expandedCategories.has(category) ? (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    )}
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => openEditDialog(question)}
-                    className="hover:bg-primary/10 hover:text-primary"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(question.id)}
-                    className="hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 ml-4 space-y-3">
+                  {Object.entries(topics).map(([topic, topicQuestions]) => {
+                    const topicKey = `${category}-${topic}`;
+                    
+                    return (
+                      <Collapsible
+                        key={topicKey}
+                        open={expandedTopics.has(topicKey)}
+                        onOpenChange={() => toggleTopic(topicKey)}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted transition-all duration-200">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{topic}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {topicQuestions.length} questions
+                              </Badge>
+                            </div>
+                            {expandedTopics.has(topicKey) ? (
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-2 space-y-3 ml-4">
+                          {topicQuestions.map((question, index) => (
+                            <div
+                              key={question.id}
+                              className="bg-card rounded-lg border p-4 hover:shadow-soft transition-all duration-300 animate-fade-in-up"
+                              style={{ animationDelay: `${index * 30}ms` }}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 space-y-3">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge
+                                      variant="outline"
+                                      className={cn("capitalize text-xs", difficultyColors[question.difficulty as keyof typeof difficultyColors])}
+                                    >
+                                      {question.difficulty}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      Q{index + 1}
+                                    </span>
+                                  </div>
+                                  <p className="font-medium text-sm">{question.question}</p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {question.options.map((option, i) => (
+                                      <div
+                                        key={i}
+                                        className={cn(
+                                          "px-2 py-1.5 rounded-md text-xs border",
+                                          option === question.correct_answer
+                                            ? "bg-success/10 border-success/30 text-success"
+                                            : "bg-muted/50"
+                                        )}
+                                      >
+                                        <span className="font-medium mr-1">{String.fromCharCode(65 + i)}.</span>
+                                        {option}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
+                                    onClick={() => openEditDialog(question)}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => handleDelete(question.id)}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
 
-          {filteredQuestions.length === 0 && (
+          {Object.keys(groupedQuestions).length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <p>No questions found</p>
             </div>
