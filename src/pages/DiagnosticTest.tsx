@@ -4,182 +4,133 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
-import { BookOpen, ChevronLeft, ChevronRight, CheckCircle } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { saveTestResults } from "@/lib/testResults";
 
-// Sample questions data - in real app, fetch from backend
-const questions = [
-  {
-    id: 1,
-    category: "Programming Basics",
-    question: "What does HTML stand for?",
-    options: [
-      "Hyper Text Markup Language",
-      "High Tech Modern Language",
-      "Home Tool Markup Language",
-      "Hyperlinks and Text Markup Language"
-    ],
-    correctAnswer: 0
-  },
-  {
-    id: 2,
-    category: "Programming Basics",
-    question: "Which symbol is used for comments in JavaScript?",
-    options: ["#", "//", "/* */", "Both // and /* */"],
-    correctAnswer: 3
-  },
-  {
-    id: 3,
-    category: "Programming Basics",
-    question: "What is a variable?",
-    options: [
-      "A fixed value that never changes",
-      "A container to store data values",
-      "A type of function",
-      "A programming language"
-    ],
-    correctAnswer: 1
-  },
-  {
-    id: 4,
-    category: "Web Development",
-    question: "CSS stands for?",
-    options: [
-      "Creative Style Sheets",
-      "Computer Style Sheets",
-      "Cascading Style Sheets",
-      "Colorful Style Sheets"
-    ],
-    correctAnswer: 2
-  },
-  {
-    id: 5,
-    category: "Web Development",
-    question: "Which HTML tag is used to create a hyperlink?",
-    options: ["<link>", "<a>", "<href>", "<url>"],
-    correctAnswer: 1
-  },
-  {
-    id: 6,
-    category: "Web Development",
-    question: "What property is used to change text color in CSS?",
-    options: ["text-color", "font-color", "color", "text-style"],
-    correctAnswer: 2
-  },
-  {
-    id: 7,
-    category: "JavaScript",
-    question: "How do you declare a JavaScript variable?",
-    options: ["variable x;", "var x;", "v x;", "declare x;"],
-    correctAnswer: 1
-  },
-  {
-    id: 8,
-    category: "JavaScript",
-    question: "What is the output of: console.log(typeof [])?",
-    options: ["array", "object", "undefined", "list"],
-    correctAnswer: 1
-  },
-  {
-    id: 9,
-    category: "JavaScript",
-    question: "Which method adds an element to the end of an array?",
-    options: ["add()", "push()", "append()", "insert()"],
-    correctAnswer: 1
-  },
-  {
-    id: 10,
-    category: "Database",
-    question: "SQL stands for?",
-    options: [
-      "Structured Query Language",
-      "Simple Query Language",
-      "Standard Query Language",
-      "Sequential Query Language"
-    ],
-    correctAnswer: 0
-  },
-  {
-    id: 11,
-    category: "Database",
-    question: "Which SQL command is used to retrieve data?",
-    options: ["GET", "RETRIEVE", "SELECT", "FETCH"],
-    correctAnswer: 2
-  },
-  {
-    id: 12,
-    category: "Database",
-    question: "What is a primary key?",
-    options: [
-      "The first column in a table",
-      "A unique identifier for each record",
-      "The most important data in a table",
-      "A password for the database"
-    ],
-    correctAnswer: 1
-  },
-  {
-    id: 13,
-    category: "Problem Solving",
-    question: "What is an algorithm?",
-    options: [
-      "A programming language",
-      "A step-by-step procedure to solve a problem",
-      "A type of computer",
-      "A debugging tool"
-    ],
-    correctAnswer: 1
-  },
-  {
-    id: 14,
-    category: "Problem Solving",
-    question: "What does 'debugging' mean?",
-    options: [
-      "Writing new code",
-      "Finding and fixing errors in code",
-      "Deleting code",
-      "Running code faster"
-    ],
-    correctAnswer: 1
-  },
-  {
-    id: 15,
-    category: "Problem Solving",
-    question: "What is a loop used for in programming?",
-    options: [
-      "To make the code look better",
-      "To repeat a block of code multiple times",
-      "To stop the program",
-      "To connect to the internet"
-    ],
-    correctAnswer: 1
-  }
-];
+interface Question {
+  id: string;
+  category: string;
+  topic: string;
+  question: string;
+  options: string[];
+  correct_answer: string;
+  difficulty: string | null;
+}
+
+const QUESTIONS_PER_TEST = 50;
 
 const DiagnosticTest = () => {
   const navigate = useNavigate();
   
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState<(number | null)[]>(
-    Array(questions.length).fill(null)
-  );
+  const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Check auth on mount
+  // Check auth and fetch questions on mount
   useEffect(() => {
-    const checkAuth = async () => {
+    const initTest = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate("/");
         return;
       }
       setUserId(session.user.id);
+
+      // Fetch already answered question IDs for this user
+      const { data: answeredData } = await supabase
+        .from("user_answers")
+        .select("question_id")
+        .eq("user_id", session.user.id);
+
+      const answeredIds = (answeredData || []).map(a => a.question_id);
+
+      // Fetch all questions from database
+      const { data: allQuestions, error } = await supabase
+        .from("questions")
+        .select("*");
+
+      if (error) {
+        console.error("Error fetching questions:", error);
+        toast({
+          title: "Error loading questions",
+          description: "Please try again later.",
+          variant: "destructive",
+        });
+        navigate("/dashboard");
+        return;
+      }
+
+      if (!allQuestions || allQuestions.length === 0) {
+        toast({
+          title: "No questions available",
+          description: "Please contact your administrator.",
+          variant: "destructive",
+        });
+        navigate("/dashboard");
+        return;
+      }
+
+      // Filter out already answered questions
+      let availableQuestions = allQuestions.filter(q => !answeredIds.includes(q.id));
+
+      // If not enough unanswered questions, use all questions (reset)
+      if (availableQuestions.length < QUESTIONS_PER_TEST) {
+        toast({
+          title: "New question set",
+          description: "You've answered all questions. Starting fresh with the full question bank!",
+        });
+        availableQuestions = allQuestions;
+      }
+
+      // Shuffle and pick 50 (or available count)
+      const shuffled = [...availableQuestions].sort(() => Math.random() - 0.5);
+      const selectedQuestions = shuffled.slice(0, Math.min(QUESTIONS_PER_TEST, shuffled.length));
+
+      // Parse options
+      const parsedQuestions: Question[] = selectedQuestions.map(q => ({
+        id: q.id,
+        category: q.category,
+        topic: q.topic,
+        question: q.question,
+        options: Array.isArray(q.options) ? q.options.map(String) : [],
+        correct_answer: q.correct_answer,
+        difficulty: q.difficulty,
+      }));
+
+      setQuestions(parsedQuestions);
+      setAnswers(Array(parsedQuestions.length).fill(null));
+      setIsLoadingQuestions(false);
     };
-    checkAuth();
+
+    initTest();
   }, [navigate]);
+
+  if (isLoadingQuestions) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-10 h-10 animate-spin mx-auto text-primary" />
+          <p className="text-muted-foreground">Loading your personalized test...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-muted-foreground">No questions available.</p>
+          <Button onClick={() => navigate("/dashboard")}>Return to Dashboard</Button>
+        </div>
+      </div>
+    );
+  }
 
   const progress = ((currentQuestion + 1) / questions.length) * 100;
   const question = questions[currentQuestion];
@@ -226,14 +177,17 @@ const DiagnosticTest = () => {
         categoryResults[q.category] = { correct: 0, total: 0 };
       }
       categoryResults[q.category].total++;
-      if (answers[index] === q.correctAnswer) {
+      
+      const selectedOptionText = q.options[answers[index] as number];
+      if (selectedOptionText === q.correct_answer) {
         categoryResults[q.category].correct++;
       }
     });
 
-    const totalCorrect = answers.filter(
-      (answer, index) => answer === questions[index].correctAnswer
-    ).length;
+    const totalCorrect = questions.filter((q, index) => {
+      const selectedOptionText = q.options[answers[index] as number];
+      return selectedOptionText === q.correct_answer;
+    }).length;
 
     const results = {
       totalScore: Math.round((totalCorrect / questions.length) * 100),
@@ -246,9 +200,23 @@ const DiagnosticTest = () => {
     // Save to localStorage for Results page
     localStorage.setItem("testResults", JSON.stringify(results));
 
-    // Save to database if user is logged in
+    // Save individual answers to database
     if (userId) {
       try {
+        // Save each answer
+        for (let i = 0; i < questions.length; i++) {
+          const q = questions[i];
+          const selectedOptionText = q.options[answers[i] as number];
+          const isCorrect = selectedOptionText === q.correct_answer;
+          
+          await supabase.from("user_answers").insert({
+            user_id: userId,
+            question_id: q.id,
+            selected_option: selectedOptionText,
+            is_correct: isCorrect,
+          });
+        }
+
         await saveTestResults(results, userId);
         toast({
           title: "Test Completed!",
@@ -305,9 +273,23 @@ const DiagnosticTest = () => {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <Card className="shadow-soft border-0 animate-fade-in">
           <CardContent className="p-6 md:p-8">
-            <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground mb-4">
-              {question.category}
-            </span>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground">
+                {question.category}
+              </span>
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                {question.topic}
+              </span>
+              {question.difficulty && (
+                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                  question.difficulty === 'easy' ? 'bg-success/20 text-success' :
+                  question.difficulty === 'hard' ? 'bg-destructive/20 text-destructive' :
+                  'bg-warning/20 text-warning'
+                }`}>
+                  {question.difficulty}
+                </span>
+              )}
+            </div>
 
             <h2 className="text-xl md:text-2xl font-semibold text-foreground mb-6">
               {question.question}
