@@ -1,0 +1,6 @@
+-- Set REPLICA IDENTITY FULL for complete row data in updates
+ALTER TABLE public.profiles REPLICA IDENTITY FULL;
+ALTER TABLE public.questions REPLICA IDENTITY FULL;
+ALTER TABLE public.test_results REPLICA IDENTITY FULL;
+ALTER TABLE public.user_answers REPLICA IDENTITY FULL;
+ALTER TABLE public.user_roles REPLICA IDENTITY FULL;
