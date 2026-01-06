@@ -96,6 +96,24 @@ export const useQuestions = () => {
     }
   };
 
+  const addQuestionsBulk = async (questions: Omit<Question, "id" | "created_at">[]) => {
+    const insertData = questions.map(q => ({
+      category: q.category,
+      topic: q.topic,
+      question: q.question,
+      options: q.options as unknown as Json,
+      correct_answer: q.correct_answer,
+      difficulty: q.difficulty,
+    }));
+
+    const { error } = await supabase.from("questions").insert(insertData);
+
+    if (error) {
+      console.error("Error bulk adding questions:", error);
+      throw error;
+    }
+  };
+
   const updateQuestion = async (id: string, question: Partial<Question>) => {
     const updateData: Record<string, unknown> = { ...question };
     if (question.options) {
@@ -128,6 +146,7 @@ export const useQuestions = () => {
     questions,
     isLoading,
     addQuestion,
+    addQuestionsBulk,
     updateQuestion,
     deleteQuestion,
     refetch: fetchQuestions,
