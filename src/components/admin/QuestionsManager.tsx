@@ -27,12 +27,13 @@ import {
 import { useQuestions, Question } from "@/hooks/useQuestions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { CSVUploader } from "./CSVUploader";
 
 const categories = ["Quantitative", "Logical", "Verbal", "Technical"];
 const difficulties = ["easy", "medium", "hard"];
 
 export const QuestionsManager = () => {
-  const { questions, isLoading, addQuestion, updateQuestion, deleteQuestion } = useQuestions();
+  const { questions, isLoading, addQuestion, addQuestionsBulk, updateQuestion, deleteQuestion } = useQuestions();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -208,6 +209,7 @@ export const QuestionsManager = () => {
               Add Question
             </Button>
           </DialogTrigger>
+          <CSVUploader onUpload={addQuestionsBulk} />
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="font-display">
